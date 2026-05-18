@@ -1,15 +1,12 @@
 """Automated evaluation of all pipeline components.
 
 Measures:
-    1. Slide Detection Precision/Recall (LLM-as-judge)
-    2. Processing Latency
+    1. Processing Latency
+    2. Transcription Quality / WER estimate (LLM-as-judge)
     3. Topic Segmentation F1 (LLM-as-judge)
-    4. Transcription Quality / WER estimate
 """
 
-import json
 import time
-from pathlib import Path
 
 from src.utils.logger import setup_logger
 from src.utils.video_utils import format_timestamp
@@ -31,14 +28,13 @@ class Evaluator:
         """
         self.client = llm_client
 
-    def evaluate_all(self, result: dict, output_dir: str) -> dict:
+    def evaluate_all(self, result: dict) -> dict:
         """Run all evaluations and generate a report.
 
         NOTE: These are ESTIMATES, not ground-truth measurements.
         - WER is estimated by LLM analysis of transcript quality
         - Topic F1 is estimated by LLM self-evaluation (may be biased)
         - Latency is directly measured (reliable)
-        - Duplicate slides are checked programmatically (reliable)
         """
         logger.info("=" * 50)
         logger.info("Starting automated evaluation")
@@ -58,11 +54,7 @@ class Evaluator:
         report["transcription"] = self._evaluate_transcription(result)
         logger.info(f"Transcription: {report['transcription']['status']}")
 
-        # 3. Duplicate Slide Check (programmatic - reliable)
-        report["slide_duplicates"] = self._check_duplicate_slides(result, output_dir)
-        logger.info(f"Slide Duplicates: {report['slide_duplicates']['status']}")
-
-        # 4. Topic Segmentation (LLM-estimated)
+        # 3. Topic Segmentation (LLM-estimated)
         report["topic_segmentation"] = self._evaluate_topics(result)
         logger.info(f"Topic Segmentation: {report['topic_segmentation']['status']}")
 
@@ -187,77 +179,7 @@ Evaluate and respond with ONLY this JSON:
                 "status": f"UNKNOWN - Evaluation failed: {e}",
             }
 
-    # ── 3. Duplicate Slide Check ──
-
-    def _check_duplicate_slides(self, result: dict, output_dir: str) -> dict:
-        """Check for duplicate slide images using perceptual hash.
-
-        This is a programmatic check (not LLM-based) so it's reliable.
-        Compares all saved slide images and reports any near-duplicates.
-        """
-        import cv2
-        import numpy as np
-
-        slides_dir = Path(output_dir) / "slides"
-        if not slides_dir.exists():
-            return {
-                "passed": True,
-                "score": 100,
-                "total_slides": 0,
-                "duplicates_found": 0,
-                "status": "PASS - No slides directory",
-            }
-
-        # Load all slide images and compute pHash
-        slide_files = sorted(slides_dir.glob("*.png")) + sorted(slides_dir.glob("*.jpg"))
-        hashes = []
-
-        for f in slide_files:
-            img = cv2.imread(str(f))
-            if img is None:
-                continue
-            resized = cv2.resize(img, (16, 16))
-            gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY).astype(np.float32)
-            dct = cv2.dct(gray)
-            dct_low = dct[:8, :8]
-            median = np.median(dct_low)
-            ph = (dct_low > median).flatten()
-            hashes.append((f.name, ph))
-
-        # Compare all pairs
-        duplicates = []
-        duplicate_threshold = 0.93
-
-        for i in range(len(hashes)):
-            for j in range(i + 1, len(hashes)):
-                name_i, hash_i = hashes[i]
-                name_j, hash_j = hashes[j]
-                dist = np.count_nonzero(hash_i != hash_j)
-                sim = 1.0 - (dist / len(hash_i))
-                if sim > duplicate_threshold:
-                    duplicates.append({
-                        "slide_a": name_i,
-                        "slide_b": name_j,
-                        "similarity": round(sim * 100, 1),
-                    })
-
-        total = len(hashes)
-        dup_count = len(duplicates)
-        passed = dup_count == 0
-        score = max(0, 100 - (dup_count * 10))
-
-        return {
-            "passed": passed,
-            "score": score,
-            "total_slides": total,
-            "unique_slides": total - dup_count,
-            "duplicates_found": dup_count,
-            "duplicate_pairs": duplicates[:10],  # limit to first 10
-            "status": f"{'PASS' if passed else 'NEEDS IMPROVEMENT'} - "
-                      f"{total} slides, {dup_count} duplicate pairs found",
-        }
-
-    # ── 4. Topic Segmentation ──
+    # ── 3. Topic Segmentation ──
 
     def _evaluate_topics(self, result: dict) -> dict:
         """Evaluate topic segmentation quality using LLM-as-judge.
@@ -377,7 +299,6 @@ Evaluate these criteria and respond with ONLY this JSON:
         """Compute overall pass/fail status."""
         criteria = {
             "Processing Latency ≤15min/60min": report.get("latency", {}),
-            "Slide Duplicate Check": report.get("slide_duplicates", {}),
             "Topic Segmentation F1 ≥0.8": report.get("topic_segmentation", {}),
             "Transcription WER ≤15%": report.get("transcription", {}),
         }

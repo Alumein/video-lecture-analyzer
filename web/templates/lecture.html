@@ -63,7 +63,6 @@
         .td-slides { display:flex; gap:6px; margin-top:10px; overflow-x:auto; padding-bottom:6px; }
         .td-slides img { height:64px; border-radius:4px; border:1px solid var(--border); cursor:pointer; flex-shrink:0; }
         .td-slides img:hover { border-color:var(--blue); }
-        .td-ocr { font-size:12px; color:var(--muted); margin-top:8px; padding:8px 10px; background:var(--bg); border-left:2px solid var(--orange); border-radius:0 4px 4px 0; }
 
         /* Slides gallery */
         .slides-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; padding:12px; }
@@ -183,9 +182,6 @@
                             <img src="/slides/{{ name }}/{{ s.slide_image.replace('\\', '/').split('/')[-1] }}">
                         </div>
                         {% endif %}
-                        {% if s.slide_text %}
-                        <div class="td-ocr">Slide text: {{ s.slide_text }}</div>
-                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>
@@ -279,23 +275,6 @@
                                 <ul class="eval-list">{% for issue in ev.transcription.issues %}<li>{{ issue }}</li>{% endfor %}</ul>
                                 {% endif %}
                                 {% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-
-                        <!-- Slide Detection -->
-                        {% if ev.slide_duplicates %}
-                        <div class="eval-card">
-                            <div class="eval-header">
-                                <span class="eval-title">Slide Duplicate Check</span>
-                                <span class="eval-badge {% if ev.slide_duplicates.passed %}eval-pass{% else %}eval-fail{% endif %}">
-                                    {{ "PASS" if ev.slide_duplicates.passed else "NEEDS WORK" }}
-                                </span>
-                            </div>
-                            <div class="eval-body">
-                                <div class="eval-row"><span class="k">Total slides</span><span class="v">{{ ev.slide_duplicates.total_slides }}</span></div>
-                                <div class="eval-row"><span class="k">Duplicate pairs</span><span class="v">{{ ev.slide_duplicates.duplicates_found }}</span></div>
-                                <div class="eval-bar"><div class="eval-bar-fill" style="width:{{ ev.slide_duplicates.score }}%;background:{% if ev.slide_duplicates.passed %}var(--green){% else %}var(--orange){% endif %}"></div></div>
                             </div>
                         </div>
                         {% endif %}

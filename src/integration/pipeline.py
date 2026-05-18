@@ -293,7 +293,7 @@ class Pipeline:
             try:
                 from src.evaluation.evaluator import Evaluator
                 evaluator = Evaluator(llm_client)
-                eval_report = evaluator.evaluate_all(result, str(out))
+                eval_report = evaluator.evaluate_all(result)
                 result["evaluation"] = eval_report
                 logger.info(f"Evaluation: {eval_report['overall']['status']}")
             except Exception as e:

@@ -253,6 +253,8 @@ class SlideDetector:
         gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (3, 3), 0)
         edges = cv2.Canny(gray, 50, 150)
+        # Dilate so 1-px jitter between repeat captures still overlaps
+        edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
         return edges.flatten() > 0
 
     def _preprocess(self, frame):

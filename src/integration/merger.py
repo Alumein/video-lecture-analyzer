@@ -220,7 +220,7 @@ class Merger:
             if slide_texts:
                 for t in transitions:
                     if t.image_path and t.image_path in slide_texts:
-                        if start <= t.timestamp <= end:
+                        if start <= t.timestamp < end:
                             slide_ocr_texts.append(slide_texts[t.image_path])
 
             segments.append({
@@ -265,25 +265,15 @@ class Merger:
         return best_slide
 
     def _find_slides_for_range(self, start: float, end: float, transitions: list) -> list[str]:
-        """Find ALL slide images within a time range."""
-        slides = []
-        # Include the slide that was active when this range started
-        last_before = None
-        for t in transitions:
-            if t.timestamp < start:
-                last_before = t.image_path
-            elif t.timestamp <= end:
-                if last_before and last_before not in slides:
-                    slides.append(last_before)
-                    last_before = None
-                if t.image_path and t.image_path not in slides:
-                    slides.append(t.image_path)
-            else:
-                break
-        # If no slides found in range, use the last one before range
-        if not slides and last_before:
-            slides.append(last_before)
-        return slides
+        """Find slide images whose transition timestamp falls in [start, end).
+
+        Half-open interval ensures each transition is assigned to exactly
+        one topic, so a slide never appears under two topics.
+        """
+        return [
+            t.image_path for t in transitions
+            if t.image_path and start <= t.timestamp < end
+        ]
 
     def _get_dominant_speaker(self, start: float, end: float, segments: list) -> str | None:
         """Find speaker with most speaking time in range."""
