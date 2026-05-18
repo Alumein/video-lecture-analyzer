@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Lecture Analyzer</title>
+    <style>
+        :root { --bg: #0f1117; --surface: #161b22; --border: #30363d; --text: #e1e4e8; --muted: #8b949e; --blue: #58a6ff; --green: #238636; --green-h: #2ea043; --red: #da3633; --orange: #d29922; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        .navbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 18px 32px; }
+        .navbar h1 { font-size: 22px; color: var(--blue); display: flex; align-items: center; gap: 10px; }
+        .navbar .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+        /* Upload */
+        .upload-zone { background: var(--surface); border: 2px dashed var(--border); border-radius: 16px; padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.25s; margin-bottom: 32px; position: relative; }
+        .upload-zone:hover, .upload-zone.drag { border-color: var(--blue); background: #1c2333; }
+        .upload-zone .icon { font-size: 52px; margin-bottom: 8px; }
+        .upload-zone p { color: var(--muted); }
+        .upload-zone .formats { font-size: 12px; color: #484f58; margin-top: 6px; }
+        .upload-zone input { display: none; }
+        .model-selector { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .model-selector label { font-weight: 600; color: var(--text); }
+        .model-selector select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 14px; cursor: pointer; }
+        .model-selector select:focus { outline: none; border-color: var(--blue); }
+        .model-hint { font-size: 12px; color: var(--muted); margin-left: auto; }
+        .upload-progress { display: none; margin-top: 16px; }
+        .upload-progress .bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+        .upload-progress .fill { height: 100%; background: var(--blue); width: 0%; transition: width 0.3s; }
+        .upload-progress .label { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+        /* Section */
+        .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .section-head h2 { font-size: 18px; color: var(--text); }
+        .badge-count { background: var(--border); color: var(--muted); padding: 3px 12px; border-radius: 20px; font-size: 13px; }
+
+        /* Cards */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: all 0.2s; }
+        .card:hover { border-color: #484f58; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+
+        .card-top { padding: 20px 20px 14px; display: flex; justify-content: space-between; align-items: flex-start; }
+        .card-name { font-size: 18px; font-weight: 600; }
+        .card-file { font-size: 13px; color: var(--muted); margin-top: 2px; }
+        .status { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+        .s-done { background: var(--green); color: #fff; }
+        .s-wait { background: var(--border); color: var(--muted); }
+        .s-run { background: var(--orange); color: #fff; animation: pulse 1.5s infinite; }
+        .s-err { background: var(--red); color: #fff; }
+        @keyframes pulse { 50% { opacity: 0.6; } }
+
+        .card-meta { padding: 0 20px 14px; display: flex; gap: 20px; flex-wrap: wrap; }
+        .meta { display: flex; flex-direction: column; }
+        .meta .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .meta .v { font-size: 14px; font-weight: 500; }
+
+        .card-slides { display: flex; gap: 4px; padding: 0 20px 14px; overflow-x: auto; scrollbar-width: thin; }
+        .card-slides img { height: 56px; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0; cursor: pointer; transition: transform 0.15s; }
+        .card-slides img:hover { transform: scale(1.08); }
+
+        .card-progress { padding: 0 20px 14px; }
+        .card-progress .bar { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+        .card-progress .fill { height: 100%; background: var(--orange); transition: width 0.4s; }
+        .card-progress .step { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+        .card-actions { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+        .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 500; transition: all 0.15s; }
+        .btn-go { background: var(--green); color: #fff; }
+        .btn-go:hover { background: var(--green-h); }
+        .btn-sec { background: transparent; color: var(--blue); border: 1px solid var(--border); }
+        .btn-sec:hover { background: #1c2333; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        .btn-red { background: transparent; color: var(--red); border: 1px solid var(--border); }
+        .btn-red:hover { background: #2d1214; }
+
+        /* Toast */
+        .toast { position: fixed; bottom: 24px; right: 24px; padding: 14px 22px; border-radius: 10px; font-size: 14px; display: none; z-index: 999; box-shadow: 0 6px 20px rgba(0,0,0,0.4); color: #fff; }
+        .toast-ok { background: var(--green); }
+        .toast-err { background: var(--red); }
+        .toast-info { background: #1c2333; border: 1px solid var(--border); color: var(--text); }
+
+        .empty { text-align: center; padding: 60px; color: var(--muted); }
+        .empty .big { font-size: 56px; opacity: 0.4; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>Video Lecture Analyzer</h1>
+        <div class="sub">Upload video &rarr; Auto analysis &rarr; View slides, transcript & summary</div>
+    </div>
+
+    <div class="container">
+        <!-- Model Selector -->
+        <div class="model-selector">
+            <label for="modelSelect">AI Model:</label>
+            <select id="modelSelect">
+                <option value="">Default (llama3.1:8b - Fast)</option>
+                <option value="qwen2.5:14b">qwen2.5:14b - High Quality (slower)</option>
+            </select>
+            <span class="model-hint" id="modelHint">Quick processing with good quality</span>
+        </div>
+
+        <!-- Upload -->
+        <div class="upload-zone" id="dropZone">
+            <div class="icon">📁</div>
+            <p><strong>Click to upload video</strong> or drag and drop</p>
+            <div class="formats">MP4, MKV, AVI, MOV &bull; Max 2 GB &bull; Analysis starts automatically after upload</div>
+            <input type="file" id="fileInput" accept=".mp4,.mkv,.avi,.mov,.webm">
+            <div class="upload-progress" id="uploadProgress">
+                <div class="bar"><div class="fill" id="uploadFill"></div></div>
+                <div class="label" id="uploadLabel">Uploading...</div>
+            </div>
+        </div>
+
+        <!-- Lectures -->
+        <div class="section-head">
+            <h2>Lectures</h2>
+            <span class="badge-count">{{ lectures|length }}</span>
+        </div>
+
+        {% if lectures %}
+        <div class="grid">
+            {% for l in lectures %}
+            <div class="card" id="card-{{ l.name }}" data-name="{{ l.name }}">
+                <div class="card-top">
+                    <div>
+                        <div class="card-name">{{ l.name }}</div>
+                        <div class="card-file">{{ l.filename }} &bull; {{ l.size_mb }} MB</div>
+                    </div>
+                    {% if l.processing %}
+                        <span class="status s-run" id="badge-{{ l.name }}">Processing</span>
+                    {% elif l.processed %}
+                        <span class="status s-done">Complete</span>
+                    {% elif l.error %}
+                        <span class="status s-err">Hata</span>
+                    {% else %}
+                        <span class="status s-wait" id="badge-{{ l.name }}">Pending</span>
+                    {% endif %}
+                </div>
+
+                {% if l.processed and l.metadata %}
+                <div class="card-meta">
+                    <div class="meta"><span class="k">Sure</span><span class="v">{{ l.metadata.duration_fmt }}</span></div>
+                    <div class="meta"><span class="k">Slide</span><span class="v">{{ l.metadata.total_slides }}</span></div>
+                    <div class="meta"><span class="k">Segment</span><span class="v">{{ l.metadata.total_segments }}</span></div>
+                    <div class="meta"><span class="k">Islem</span><span class="v">{{ l.metadata.processing_time_fmt }}</span></div>
+                </div>
+                {% endif %}
+
+                {% if l.processed and l.segments %}
+                <div class="card-slides">
+                    {% for seg in l.segments[:8] %}
+                    {% if seg.slide_image %}
+                    <img src="/slides/{{ l.name }}/{{ seg.slide_image.replace('\\', '/').split('/')[-1] }}" alt="Slide {{ seg.id }}" title="Slide {{ seg.id }} - {{ seg.start_fmt }}">
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if l.processing %}
+                <div class="card-progress" id="prog-{{ l.name }}">
+                    <div class="bar"><div class="fill" id="progfill-{{ l.name }}" style="width:0%"></div></div>
+                    <div class="step" id="progstep-{{ l.name }}">Baslatiliyor...</div>
+                </div>
+                {% endif %}
+
+                <div class="card-actions">
+                    {% if l.processed %}
+                        <a href="/lecture/{{ l.name }}" class="btn btn-go">Details</a>
+                        <button class="btn btn-sec btn-sm" onclick="reanalyze('{{ l.name }}')">Re-analyze</button>
+                    {% elif l.processing %}
+                        <span class="btn btn-sec btn-sm" style="cursor:default;opacity:0.5">Processing...</span>
+                    {% elif l.error %}
+                        <button class="btn btn-go" onclick="analyze('{{ l.name }}')">Retry</button>
+                    {% else %}
+                        <button class="btn btn-go" onclick="analyze('{{ l.name }}')">Analyze</button>
+                    {% endif %}
+                    <button class="btn btn-red btn-sm" onclick="deleteLecture('{{ l.name }}')">Delete</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">
+            <div class="big">📹</div>
+            <p>No videos uploaded yet.</p>
+            <p>Drag your lecture videos to the area above.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const drop = document.getElementById('dropZone');
+        const input = document.getElementById('fileInput');
+
+        drop.addEventListener('click', () => input.click());
+        drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+        drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+        drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag'); if(e.dataTransfer.files[0]) doUpload(e.dataTransfer.files[0]); });
+        input.addEventListener('change', () => { if(input.files[0]) doUpload(input.files[0]); });
+
+        function doUpload(file) {
+            const prog = document.getElementById('uploadProgress');
+            const fill = document.getElementById('uploadFill');
+            const label = document.getElementById('uploadLabel');
+            prog.style.display = 'block';
+            fill.style.width = '0%';
+            label.textContent = 'Uploading: ' + file.name;
+
+            const fd = new FormData();
+            fd.append('video', file);
+            const selectedModel = document.getElementById('modelSelect').value;
+            if(selectedModel) fd.append('model', selectedModel);
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload');
+            xhr.upload.onprogress = e => {
+                if(e.lengthComputable) {
+                    const pct = Math.round(e.loaded / e.total * 100);
+                    fill.style.width = pct + '%';
+                    label.textContent = 'Uploading: ' + pct + '%';
+                }
+            };
+            xhr.onload = () => {
+                const d = JSON.parse(xhr.responseText);
+                if(d.success) {
+                    fill.style.width = '100%';
+                    label.textContent = 'Uploaded! Analysis starting...';
+                    toast('Uploaded: ' + file.name + ' - Analysis started automatically', 'ok');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    label.textContent = 'Error: ' + d.error;
+                    toast(d.error, 'err');
+                }
+            };
+            xhr.onerror = () => { label.textContent = 'Connection error'; toast('Upload failed', 'err'); };
+            xhr.send(fd);
+        }
+
+        // Update hint when model changes
+        document.getElementById('modelSelect').addEventListener('change', function() {
+            const hint = document.getElementById('modelHint');
+            if(this.value === 'qwen2.5:14b') {
+                hint.textContent = 'Higher quality, takes 2-3x longer';
+                hint.style.color = 'var(--orange)';
+            } else {
+                hint.textContent = 'Quick processing with good quality';
+                hint.style.color = 'var(--muted)';
+            }
+        });
+
+        function getModel() {
+            return document.getElementById('modelSelect').value || '';
+        }
+
+        function analyze(name) {
+            const fd = new FormData();
+            const m = getModel();
+            if(m) fd.append('model', m);
+            fetch('/analyze/' + name, {method:'POST', body: fd}).then(r=>r.json()).then(d => {
+                if(d.success) { toast(name + ' analysis started', 'ok'); setTimeout(()=>location.reload(), 800); }
+                else toast(d.error, 'err');
+            });
+        }
+
+        function reanalyze(name) {
+            if(!confirm(name + ' old results will be deleted and re-analyzed. Are you sure?')) return;
+            const fd = new FormData();
+            const m = getModel();
+            if(m) fd.append('model', m);
+            fetch('/reanalyze/' + name, {method:'POST', body: fd}).then(r=>r.json()).then(d => {
+                if(d.success) { toast('Re-analysis started', 'ok'); setTimeout(()=>location.reload(), 800); }
+                else toast(d.error, 'err');
+            });
+        }
+
+        function deleteLecture(name) {
+            if(!confirm(name + ' will be completely deleted. Are you sure?')) return;
+            fetch('/delete/' + name, {method:'POST'}).then(r=>r.json()).then(d => {
+                if(d.success) { toast(name + ' deleted', 'info'); setTimeout(()=>location.reload(), 500); }
+            });
+        }
+
+        // Poll running jobs
+        {% for l in lectures %}{% if l.processing %}
+        (function poll_{{ l.name|replace('-','_') }}() {
+            fetch('/status/{{ l.name }}').then(r=>r.json()).then(s => {
+                const fill = document.getElementById('progfill-{{ l.name }}');
+                const step = document.getElementById('progstep-{{ l.name }}');
+                if(fill) fill.style.width = (s.progress||0) + '%';
+                if(step) step.textContent = s.step || '';
+                if(s.done) { toast('{{ l.name }} analysis complete!', 'ok'); setTimeout(()=>location.reload(), 1000); }
+                else if(s.error) { toast('{{ l.name }}: ' + s.error, 'err'); setTimeout(()=>location.reload(), 2000); }
+                else if(s.running) setTimeout(poll_{{ l.name|replace('-','_') }}, 2000);
+                else { setTimeout(()=>location.reload(), 1000); }
+            });
+        })();
+        {% endif %}{% endfor %}
+
+        function toast(msg, type) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toast toast-' + (type||'info');
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 4000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ name }} - Lecture Analyzer</title>
+    <style>
+        :root { --bg:#0f1117; --surface:#161b22; --surface2:#1c2333; --border:#30363d; --text:#e1e4e8; --muted:#8b949e; --blue:#58a6ff; --green:#238636; --green2:#2ea043; --orange:#d29922; --red:#da3633; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; }
+
+        /* Top nav */
+        .nav { background:var(--surface); border-bottom:1px solid var(--border); padding:10px 20px; display:flex; align-items:center; gap:14px; height:48px; flex-shrink:0; }
+        .nav a { color:var(--blue); text-decoration:none; padding:5px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; }
+        .nav a:hover { background:var(--surface2); }
+        .nav h1 { font-size:16px; flex:1; }
+        .nav .meta { font-size:12px; color:var(--muted); }
+
+        /* Main layout: video left, panel right */
+        .main { display:flex; height:calc(100vh - 48px); }
+
+        /* Video section */
+        .video-section { flex:1; display:flex; flex-direction:column; min-width:0; }
+        .video-container { flex:1; background:#000; display:flex; align-items:center; justify-content:center; position:relative; }
+        .video-container video { width:100%; height:100%; object-fit:contain; }
+
+        /* Current topic bar below video */
+        .now-playing { background:var(--surface); border-top:1px solid var(--border); padding:12px 20px; flex-shrink:0; }
+        .now-topic { font-size:15px; font-weight:600; color:var(--blue); }
+        .now-time { font-size:12px; color:var(--muted); margin-top:2px; }
+        .now-summary { font-size:13px; color:var(--muted); margin-top:6px; line-height:1.5; max-height:40px; overflow:hidden; }
+
+        /* Right panel */
+        .panel { width:420px; min-width:360px; border-left:1px solid var(--border); display:flex; flex-direction:column; background:var(--surface); }
+
+        /* Panel tabs */
+        .panel-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .ptab { flex:1; padding:10px; text-align:center; font-size:13px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; transition:.15s; }
+        .ptab:hover { color:var(--text); }
+        .ptab.on { color:var(--blue); border-color:var(--blue); }
+
+        /* Panel content */
+        .panel-body { flex:1; overflow-y:auto; }
+        .ppane { display:none; }
+        .ppane.on { display:block; }
+
+        /* Topic list */
+        .topic-item { padding:14px 16px; border-bottom:1px solid var(--border); cursor:pointer; transition:.15s; display:flex; gap:12px; align-items:flex-start; }
+        .topic-item:hover { background:var(--surface2); }
+        .topic-item.active { background:var(--surface2); border-left:3px solid var(--blue); }
+        .topic-num { background:var(--green); color:#fff; min-width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
+        .topic-info { flex:1; min-width:0; }
+        .topic-title { font-size:14px; font-weight:600; line-height:1.3; }
+        .topic-time { font-size:12px; color:var(--muted); margin-top:3px; }
+        .topic-dur { font-size:11px; color:var(--muted); }
+
+        /* Topic detail (when expanded) */
+        .topic-detail { padding:0 16px 14px 56px; display:none; }
+        .topic-item.active + .topic-detail { display:block; }
+        .td-summary { font-size:13px; color:var(--muted); line-height:1.5; margin-bottom:8px; background:var(--bg); padding:10px; border-radius:6px; }
+        .td-kp { font-size:13px; margin-bottom:4px; display:flex; gap:6px; }
+        .td-kp::before { content:"•"; color:var(--green); flex-shrink:0; }
+        .td-slides { display:flex; gap:6px; margin-top:10px; overflow-x:auto; padding-bottom:6px; }
+        .td-slides img { height:64px; border-radius:4px; border:1px solid var(--border); cursor:pointer; flex-shrink:0; }
+        .td-slides img:hover { border-color:var(--blue); }
+        .td-ocr { font-size:12px; color:var(--muted); margin-top:8px; padding:8px 10px; background:var(--bg); border-left:2px solid var(--orange); border-radius:0 4px 4px 0; }
+
+        /* Slides gallery */
+        .slides-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; padding:12px; }
+        .sg-card { background:var(--bg); border:1px solid var(--border); border-radius:6px; overflow:hidden; cursor:pointer; }
+        .sg-card:hover { border-color:var(--blue); }
+        .sg-card img { width:100%; display:block; }
+        .sg-card .sg-cap { padding:6px 8px; font-size:11px; color:var(--muted); }
+
+        /* Transcript */
+        .transcript-view { padding:16px; }
+        .tr-line { margin-bottom:10px; font-size:13px; line-height:1.6; cursor:pointer; padding:4px 8px; border-radius:4px; }
+        .tr-line:hover { background:var(--surface2); }
+        .tr-line.active { background:var(--surface2); border-left:2px solid var(--blue); }
+        .tr-ts { color:var(--blue); font-family:monospace; font-size:12px; margin-right:8px; }
+
+        /* Evaluation */
+        .eval-section { padding:16px; }
+        .eval-card { background:var(--bg); border:1px solid var(--border); border-radius:8px; margin-bottom:12px; overflow:hidden; }
+        .eval-header { padding:12px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); }
+        .eval-title { font-size:14px; font-weight:600; }
+        .eval-badge { padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600; }
+        .eval-pass { background:#23863620; color:var(--green2); border:1px solid var(--green); }
+        .eval-fail { background:#da363320; color:var(--red); border:1px solid var(--red); }
+        .eval-unknown { background:#d2992220; color:var(--orange); border:1px solid var(--orange); }
+        .eval-body { padding:12px 16px; }
+        .eval-row { display:flex; justify-content:space-between; padding:4px 0; font-size:13px; }
+        .eval-row .k { color:var(--muted); }
+        .eval-row .v { font-weight:500; }
+        .eval-bar { height:6px; background:var(--border); border-radius:3px; margin-top:8px; overflow:hidden; }
+        .eval-bar-fill { height:100%; border-radius:3px; transition:width 0.5s; }
+        .eval-list { margin-top:8px; font-size:12px; color:var(--muted); }
+        .eval-list li { margin-bottom:3px; }
+        .eval-overall { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px; text-align:center; }
+        .eval-score-big { font-size:36px; font-weight:700; }
+        .eval-score-label { font-size:13px; color:var(--muted); margin-top:4px; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background:var(--bg); }
+        ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+        ::-webkit-scrollbar-thumb:hover { background:var(--muted); }
+
+        /* Responsive */
+        @media(max-width:900px) {
+            .main { flex-direction:column; }
+            .panel { width:100%; min-width:0; height:50vh; border-left:none; border-top:1px solid var(--border); }
+        }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">&larr;</a>
+        <h1>{{ name }}</h1>
+        <div class="meta">
+            {{ result.metadata.duration_fmt }} &bull;
+            {{ result.metadata.total_slides }} slide &bull;
+            {{ result.metadata.total_segments }} segment &bull;
+            {{ "Transcript: Var" if result.metadata.has_transcript else "Transcript: Yok" }}
+        </div>
+    </div>
+
+    <div class="main">
+        <!-- Left: Video Player -->
+        <div class="video-section">
+            <div class="video-container">
+                <video id="player" controls preload="metadata">
+                    <source src="/video/{{ name }}" type="video/mp4">
+                    Tarayiciniz video oynatmayi desteklemiyor.
+                </video>
+            </div>
+            <div class="now-playing" id="nowPlaying">
+                <div class="now-topic" id="nowTopic">Waiting for video to start...</div>
+                <div class="now-time" id="nowTime"></div>
+                <div class="now-summary" id="nowSummary"></div>
+            </div>
+        </div>
+
+        <!-- Right: Analysis Panel -->
+        <div class="panel">
+            <div class="panel-tabs">
+                <div class="ptab on" onclick="switchPanel('topics',this)">Topics</div>
+                <div class="ptab" onclick="switchPanel('slides',this)">Slides</div>
+                <div class="ptab" onclick="switchPanel('transcript',this)">Transcript</div>
+                {% if result.evaluation and not result.evaluation.error %}
+                <div class="ptab" onclick="switchPanel('eval',this)">Report</div>
+                {% endif %}
+            </div>
+            <div class="panel-body">
+                <!-- Topics pane -->
+                <div class="ppane on" id="p-topics">
+                    {% for s in result.segments %}
+                    <div class="topic-item" id="topic-{{ s.id }}" onclick="seekToTopic({{ s.id }})">
+                        <div class="topic-num">{{ s.id }}</div>
+                        <div class="topic-info">
+                            <div class="topic-title">{{ s.topic or ("Segment " ~ s.id) }}</div>
+                            <div class="topic-time">{{ s.start_fmt }} &ndash; {{ s.end_fmt }}</div>
+                            <div class="topic-dur">{{ "%.0f"|format(s.duration) }} seconds</div>
+                        </div>
+                    </div>
+                    <div class="topic-detail" id="detail-{{ s.id }}">
+                        {% if s.summary %}
+                        <div class="td-summary">{{ s.summary }}</div>
+                        {% endif %}
+                        {% if s.key_points %}
+                        {% for p in s.key_points %}
+                        <div class="td-kp">{{ p }}</div>
+                        {% endfor %}
+                        {% endif %}
+                        {% if s.slide_images %}
+                        <div class="td-slides">
+                            {% for img in s.slide_images %}
+                            <img src="/slides/{{ name }}/{{ img.replace('\\', '/').split('/')[-1] }}" onclick="event.stopPropagation()" title="Slide">
+                            {% endfor %}
+                        </div>
+                        {% elif s.slide_image %}
+                        <div class="td-slides">
+                            <img src="/slides/{{ name }}/{{ s.slide_image.replace('\\', '/').split('/')[-1] }}">
+                        </div>
+                        {% endif %}
+                        {% if s.slide_text %}
+                        <div class="td-ocr">Slide text: {{ s.slide_text }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Slides pane -->
+                <div class="ppane" id="p-slides">
+                    <div class="slides-grid">
+                        {% for s in result.segments %}
+                            {% if s.slide_images %}
+                                {% for img in s.slide_images %}
+                                <div class="sg-card" onclick="seekToTime({{ s.start_time }})">
+                                    <img src="/slides/{{ name }}/{{ img.replace('\\', '/').split('/')[-1] }}">
+                                    <div class="sg-cap">{{ s.start_fmt }} - {{ s.topic or "" }}</div>
+                                </div>
+                                {% endfor %}
+                            {% elif s.slide_image %}
+                                <div class="sg-card" onclick="seekToTime({{ s.start_time }})">
+                                    <img src="/slides/{{ name }}/{{ s.slide_image.replace('\\', '/').split('/')[-1] }}">
+                                    <div class="sg-cap">{{ s.start_fmt }} - {{ s.topic or "" }}</div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Transcript pane -->
+                <div class="ppane" id="p-transcript">
+                    <div class="transcript-view">
+                        {% if result.metadata.has_transcript %}
+                            {% for s in result.segments %}
+                            {% if s.transcript %}
+                            <div class="tr-line" id="tr-{{ s.id }}" onclick="seekToTime({{ s.start_time }})">
+                                <span class="tr-ts">[{{ s.start_fmt }}]</span>{{ s.transcript[:300] }}{% if s.transcript|length > 300 %}...{% endif %}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <div style="padding:40px;text-align:center;color:var(--muted);">No transcript available.</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Evaluation pane -->
+                {% if result.evaluation and not result.evaluation.error %}
+                {% set ev = result.evaluation %}
+                <div class="ppane" id="p-eval">
+                    <div class="eval-section">
+                        <!-- Overall Score -->
+                        <div class="eval-overall">
+                            <div class="eval-score-big" style="color:{% if ev.overall.average_score >= 80 %}var(--green2){% elif ev.overall.average_score >= 60 %}var(--orange){% else %}var(--red){% endif %}">
+                                {{ "%.0f"|format(ev.overall.average_score) }}/100
+                            </div>
+                            <div class="eval-score-label">{{ ev.overall.criteria_passed }}/{{ ev.overall.criteria_total }} criteria passed</div>
+                        </div>
+
+                        <!-- Latency -->
+                        {% if ev.latency %}
+                        <div class="eval-card">
+                            <div class="eval-header">
+                                <span class="eval-title">Processing Latency</span>
+                                <span class="eval-badge {% if ev.latency.passed %}eval-pass{% else %}eval-fail{% endif %}">
+                                    {{ "PASS" if ev.latency.passed else "FAIL" }}
+                                </span>
+                            </div>
+                            <div class="eval-body">
+                                <div class="eval-row"><span class="k">Processing time</span><span class="v">{{ ev.latency.processing_time_fmt }}</span></div>
+                                <div class="eval-row"><span class="k">Video duration</span><span class="v">{{ ev.latency.video_duration_fmt }}</span></div>
+                                <div class="eval-row"><span class="k">Ratio</span><span class="v">{{ ev.latency.time_ratio }}x</span></div>
+                                <div class="eval-row"><span class="k">60min projection</span><span class="v">{{ ev.latency.normalized_60min }}s (hedef: ≤900s)</span></div>
+                                <div class="eval-bar"><div class="eval-bar-fill" style="width:{{ ev.latency.score }}%;background:{% if ev.latency.passed %}var(--green){% else %}var(--red){% endif %}"></div></div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Transcription -->
+                        {% if ev.transcription %}
+                        <div class="eval-card">
+                            <div class="eval-header">
+                                <span class="eval-title">Transcription Quality (WER)</span>
+                                <span class="eval-badge {% if ev.transcription.passed %}eval-pass{% elif ev.transcription.passed == false %}eval-fail{% else %}eval-unknown{% endif %}">
+                                    {{ "PASS" if ev.transcription.passed else ("FAIL" if ev.transcription.passed == false else "?") }}
+                                </span>
+                            </div>
+                            <div class="eval-body">
+                                {% if ev.transcription.estimated_wer is not none %}
+                                <div class="eval-row"><span class="k">Estimated WER</span><span class="v">{{ ev.transcription.estimated_wer }}%</span></div>
+                                <div class="eval-row"><span class="k">Quality</span><span class="v">{{ ev.transcription.quality }}</span></div>
+                                <div class="eval-row"><span class="k">Coherence</span><span class="v">{{ ev.transcription.coherence_score }}/10</span></div>
+                                <div class="eval-bar"><div class="eval-bar-fill" style="width:{{ ev.transcription.score }}%;background:{% if ev.transcription.passed %}var(--green){% else %}var(--red){% endif %}"></div></div>
+                                {% if ev.transcription.issues %}
+                                <ul class="eval-list">{% for issue in ev.transcription.issues %}<li>{{ issue }}</li>{% endfor %}</ul>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Slide Detection -->
+                        {% if ev.slide_duplicates %}
+                        <div class="eval-card">
+                            <div class="eval-header">
+                                <span class="eval-title">Slide Duplicate Check</span>
+                                <span class="eval-badge {% if ev.slide_duplicates.passed %}eval-pass{% else %}eval-fail{% endif %}">
+                                    {{ "PASS" if ev.slide_duplicates.passed else "NEEDS WORK" }}
+                                </span>
+                            </div>
+                            <div class="eval-body">
+                                <div class="eval-row"><span class="k">Total slides</span><span class="v">{{ ev.slide_duplicates.total_slides }}</span></div>
+                                <div class="eval-row"><span class="k">Duplicate pairs</span><span class="v">{{ ev.slide_duplicates.duplicates_found }}</span></div>
+                                <div class="eval-bar"><div class="eval-bar-fill" style="width:{{ ev.slide_duplicates.score }}%;background:{% if ev.slide_duplicates.passed %}var(--green){% else %}var(--orange){% endif %}"></div></div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Topic Segmentation -->
+                        {% if ev.topic_segmentation %}
+                        <div class="eval-card">
+                            <div class="eval-header">
+                                <span class="eval-title">Topic Segmentation</span>
+                                <span class="eval-badge {% if ev.topic_segmentation.passed %}eval-pass{% elif ev.topic_segmentation.passed == false %}eval-fail{% else %}eval-unknown{% endif %}">
+                                    {{ "PASS" if ev.topic_segmentation.passed else ("NEEDS WORK" if ev.topic_segmentation.passed == false else "?") }}
+                                </span>
+                            </div>
+                            <div class="eval-body">
+                                {% if ev.topic_segmentation.f1_estimate is defined %}
+                                <div class="eval-row"><span class="k">F1 Estimate</span><span class="v">{{ ev.topic_segmentation.f1_estimate }}%</span></div>
+                                <div class="eval-row"><span class="k">Coverage</span><span class="v">{{ ev.topic_segmentation.coverage_percent }}%</span></div>
+                                <div class="eval-row"><span class="k">Segments</span><span class="v">{{ ev.topic_segmentation.total_segments }}</span></div>
+                                <div class="eval-row"><span class="k">Title quality</span><span class="v">{{ ev.topic_segmentation.title_specificity }}/10</span></div>
+                                <div class="eval-row"><span class="k">Summary quality</span><span class="v">{{ ev.topic_segmentation.summary_quality }}/10</span></div>
+                                <div class="eval-bar"><div class="eval-bar-fill" style="width:{{ ev.topic_segmentation.f1_estimate }}%;background:{% if ev.topic_segmentation.passed %}var(--green){% else %}var(--orange){% endif %}"></div></div>
+                                {% if ev.topic_segmentation.improvements %}
+                                <ul class="eval-list">{% for imp in ev.topic_segmentation.improvements %}<li>{{ imp }}</li>{% endfor %}</ul>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const segments = {{ result.segments | tojson }};
+
+        // Seek to topic start time
+        function seekToTopic(id) {
+            const seg = segments.find(s => s.id === id);
+            if (!seg) return;
+            player.currentTime = seg.start_time;
+            player.play();
+            highlightTopic(id);
+        }
+
+        function seekToTime(t) {
+            player.currentTime = t;
+            player.play();
+        }
+
+        // Track current topic as video plays
+        let currentTopicId = null;
+        player.addEventListener('timeupdate', () => {
+            const t = player.currentTime;
+            let active = null;
+            for (const seg of segments) {
+                if (t >= seg.start_time && t < seg.end_time) {
+                    active = seg;
+                    break;
+                }
+            }
+            if (!active && segments.length > 0) {
+                // Find closest
+                active = segments.reduce((best, s) =>
+                    Math.abs(s.start_time - t) < Math.abs(best.start_time - t) ? s : best
+                );
+            }
+            if (active && active.id !== currentTopicId) {
+                currentTopicId = active.id;
+                highlightTopic(active.id);
+                updateNowPlaying(active);
+            }
+        });
+
+        function highlightTopic(id) {
+            // Topics panel
+            document.querySelectorAll('.topic-item').forEach(el => el.classList.remove('active'));
+            const el = document.getElementById('topic-' + id);
+            if (el) {
+                el.classList.add('active');
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            // Transcript panel
+            document.querySelectorAll('.tr-line').forEach(el => el.classList.remove('active'));
+            const tr = document.getElementById('tr-' + id);
+            if (tr) tr.classList.add('active');
+        }
+
+        function updateNowPlaying(seg) {
+            document.getElementById('nowTopic').textContent = seg.topic || 'Segment ' + seg.id;
+            document.getElementById('nowTime').textContent = seg.start_fmt + ' - ' + seg.end_fmt;
+            document.getElementById('nowSummary').textContent = seg.summary || '';
+        }
+
+        // Panel tab switching
+        function switchPanel(name, el) {
+            document.querySelectorAll('.ptab').forEach(t => t.classList.remove('on'));
+            document.querySelectorAll('.ppane').forEach(p => p.classList.remove('on'));
+            el.classList.add('on');
+            document.getElementById('p-' + name).classList.add('on');
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            if (e.key === ' ') { e.preventDefault(); player.paused ? player.play() : player.pause(); }
+            if (e.key === 'ArrowRight') { player.currentTime += 10; }
+            if (e.key === 'ArrowLeft') { player.currentTime -= 10; }
+            // Next/prev topic
+            if (e.key === 'n' || e.key === 'N') {
+                const idx = segments.findIndex(s => s.id === currentTopicId);
+                if (idx < segments.length - 1) seekToTopic(segments[idx + 1].id);
+            }
+            if (e.key === 'p' || e.key === 'P') {
+                const idx = segments.findIndex(s => s.id === currentTopicId);
+                if (idx > 0) seekToTopic(segments[idx - 1].id);
+            }
+        });
+
+        // Start with first topic info
+        if (segments.length > 0) {
+            updateNowPlaying(segments[0]);
+        }
+    </script>
+</body>
+</html>

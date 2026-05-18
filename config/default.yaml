@@ -1,0 +1,68 @@
+# Automated Video Lecture Analyzer - Default Configuration
+
+visual:
+  # Threshold: null = auto-detect (recommended). 
+  # Auto uses mean + 4*std of frame differences.
+  # Set manually only if auto doesn't work well (e.g., 8.0 for low-contrast videos).
+  threshold: null
+  # Minimum seconds between slide transitions
+  min_interval: 2.0
+  # Resize width for comparison (smaller = faster)
+  resize_width: 480
+
+audio:
+  # Faster-Whisper model size (tiny/base/small/medium/large-v3)
+  # medium: good balance of speed and quality (~3x faster than large-v3)
+  # large-v3: best quality but slower
+  whisper_model: "medium"
+  # Language: null = auto-detect, "en" = English, "tr" = Turkish
+  language: null
+  # Compute device
+  device: "cuda"
+  # Compute type (float16 for GPU, int8 for CPU)
+  compute_type: "float16"
+  # Beam size for decoding
+  beam_size: 5
+
+diarization:
+  # Enable speaker diarization (requires HF_TOKEN)
+  enabled: false
+  # Minimum number of speakers (null = auto)
+  min_speakers: null
+  # Maximum number of speakers (null = auto)
+  max_speakers: null
+
+nlp:
+  # LLM Provider: "ollama" (local, recommended) or "gemini" (cloud)
+  # If ollama_model is set, Ollama is used first.
+  # If only gemini is configured, Gemini is used.
+  # If neither is set, auto-detect Ollama on localhost.
+
+  # Ollama settings (local LLM - no API key needed)
+  ollama_model: "llama3.1:8b"    # or gemma2:9b, mistral:7b, phi3:mini
+  ollama_url: "http://localhost:11434"
+
+  # Gemini settings (cloud - needs API key in .env)
+  gemini_model: "gemini-2.0-flash"
+
+  # Shared settings
+  max_topics: 20
+  temperature: 0.3
+
+output:
+  # Output format
+  format: "json"
+  # Extract slide images
+  save_slides: true
+  # Slide image format
+  slide_format: "png"
+  # Slide image quality (for jpg)
+  slide_quality: 85
+
+pipeline:
+  # Number of worker threads for parallel processing
+  workers: 4
+  # Temporary directory for intermediate files
+  temp_dir: null  # null = system default
+  # Clean up temp files after processing
+  cleanup: true
