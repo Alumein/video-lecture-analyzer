@@ -41,6 +41,12 @@ nlp:
   # Ollama settings (local LLM - no API key needed)
   ollama_model: "llama3.1:8b"    # or gemma2:9b, mistral:7b, phi3:mini
   ollama_url: "http://localhost:11434"
+  # Context window in tokens. 8192 fits an 8K-char chunk plus response.
+  # Bump higher if you see truncated/malformed output, lower for speed.
+  ollama_num_ctx: 8192
+  # HTTP timeout per request (seconds). Increase for large models that
+  # spill to CPU on low-VRAM GPUs (e.g. qwen2.5:14b on an 8GB GPU).
+  ollama_timeout: 600
 
   # Gemini settings (cloud - needs API key in .env)
   gemini_model: "gemini-2.0-flash"

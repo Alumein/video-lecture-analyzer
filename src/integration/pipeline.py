@@ -171,6 +171,8 @@ class Pipeline:
                     client = OllamaClient(
                         model=ollama_model, base_url=ollama_url,
                         temperature=nlp_conf.get("temperature", 0.3),
+                        num_ctx=nlp_conf.get("ollama_num_ctx", 8192),
+                        timeout=nlp_conf.get("ollama_timeout", 600),
                     )
                     if client.is_available():
                         llm_client = client

@@ -39,6 +39,8 @@ class OllamaClient:
         base_url: str = "http://localhost:11434",
         temperature: float = 0.3,
         max_retries: int = 2,
+        num_ctx: int = 8192,
+        timeout: int = 600,
     ):
         """
         Args:
@@ -46,11 +48,19 @@ class OllamaClient:
             base_url: Ollama API URL (default localhost:11434).
             temperature: Sampling temperature (0.0-1.0).
             max_retries: Number of retries on connection errors.
+            num_ctx: Context window in tokens. Larger = handles bigger
+                prompts but slower. 8192 covers an 8K-char chunk plus
+                response.
+            timeout: HTTP timeout per request, in seconds. Large models
+                that spill to CPU (e.g., qwen2.5:14b on 8GB VRAM) need
+                more than the default.
         """
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.temperature = temperature
         self.max_retries = max_retries
+        self.num_ctx = num_ctx
+        self.timeout = timeout
         self._verified = False
 
     def _verify_connection(self):
@@ -86,12 +96,18 @@ class OllamaClient:
         self._verified = True
         logger.info(f"Ollama connected: {self.model} @ {self.base_url}")
 
-    def generate(self, prompt: str, system_instruction: str | None = None) -> str:
+    def generate(
+        self,
+        prompt: str,
+        system_instruction: str | None = None,
+        json_mode: bool = False,
+    ) -> str:
         """Send prompt to Ollama and return response text.
 
         Args:
             prompt: User prompt.
             system_instruction: Optional system message.
+            json_mode: If True, ask Ollama to constrain output to valid JSON.
 
         Returns:
             Generated text response.
@@ -109,18 +125,25 @@ class OllamaClient:
             "stream": False,
             "options": {
                 "temperature": self.temperature,
+                "num_ctx": self.num_ctx,
             },
         }
+        if json_mode:
+            payload["format"] = "json"
 
         last_error = None
         for attempt in range(1, self.max_retries + 1):
             try:
-                logger.debug(f"Ollama request (attempt {attempt}, {len(prompt)} chars)")
+                logger.debug(
+                    f"Ollama request (model={self.model}, attempt {attempt}, "
+                    f"{len(prompt)} chars, num_ctx={self.num_ctx}, "
+                    f"json_mode={json_mode})"
+                )
 
                 resp = requests.post(
                     f"{self.base_url}/api/chat",
                     json=payload,
-                    timeout=300,  # 5 min timeout for long transcripts
+                    timeout=self.timeout,
                 )
                 resp.raise_for_status()
 
@@ -134,20 +157,35 @@ class OllamaClient:
                 return text
 
             except requests.Timeout:
-                last_error = "Request timeout (model may be loading)"
-                logger.warning(f"Ollama timeout (attempt {attempt}/{self.max_retries})")
+                last_error = (
+                    f"Request timeout after {self.timeout}s "
+                    f"(model={self.model} may be loading or running on CPU)"
+                )
+                logger.warning(
+                    f"Ollama timeout (model={self.model}, "
+                    f"attempt {attempt}/{self.max_retries})"
+                )
             except requests.ConnectionError:
                 last_error = "Connection lost"
-                logger.warning(f"Ollama connection lost (attempt {attempt}/{self.max_retries})")
+                logger.warning(
+                    f"Ollama connection lost (model={self.model}, "
+                    f"attempt {attempt}/{self.max_retries})"
+                )
                 self._verified = False
             except Exception as e:
                 last_error = str(e)
-                logger.warning(f"Ollama error (attempt {attempt}/{self.max_retries}): {e}")
+                logger.warning(
+                    f"Ollama error (model={self.model}, "
+                    f"attempt {attempt}/{self.max_retries}): {e}"
+                )
 
             if attempt < self.max_retries:
                 time.sleep(2)
 
-        raise RuntimeError(f"Ollama failed after {self.max_retries} attempts: {last_error}")
+        raise RuntimeError(
+            f"Ollama failed after {self.max_retries} attempts "
+            f"(model={self.model}): {last_error}"
+        )
 
     def generate_json(
         self,
@@ -168,7 +206,7 @@ class OllamaClient:
             "No markdown, no explanations, no code fences. Just raw JSON."
         )
 
-        raw = self.generate(json_prompt, json_system.strip())
+        raw = self.generate(json_prompt, json_system.strip(), json_mode=True)
         return self._parse_json_response(raw)
 
     @staticmethod
