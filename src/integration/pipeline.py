@@ -209,22 +209,28 @@ class Pipeline:
                 logger.info(f"NLP engine: {llm_name}")
                 progress(f"Identifying topics with LLM ({llm_name})...", 80)
 
-                full_transcript = "\n".join(
-                    f"[{format_timestamp(s.start)}] {s.text}"
+                # Merge transcript + OCR lines into a single timestamp-sorted
+                # stream. The chunker assumes monotonic time; two concatenated
+                # 0→end sections break its [start, end] math for chunks that
+                # straddle the boundary.
+                timed_lines: list[tuple[float, str]] = [
+                    (s.start, f"[{format_timestamp(s.start)}] {s.text}")
                     for s in transcript_segments
-                )
-
-                # Inject OCR slide text into transcript for richer context
+                ]
                 if slide_texts:
-                    ocr_section = "\n\n--- SLIDE TEXT (OCR) ---\n"
+                    ocr_added = 0
                     for t in transitions:
                         if t.image_path and t.image_path in slide_texts:
-                            ocr_section += (
+                            timed_lines.append((
+                                t.timestamp,
                                 f"[{format_timestamp(t.timestamp)}] "
-                                f"SLIDE: {slide_texts[t.image_path]}\n"
-                            )
-                    full_transcript = ocr_section + "\n--- TRANSCRIPT ---\n" + full_transcript
-                    logger.info(f"OCR text injected: {len(slide_texts)} slides")
+                                f"SLIDE: {slide_texts[t.image_path]}",
+                            ))
+                            ocr_added += 1
+                    logger.info(f"OCR text merged inline: {ocr_added} slides")
+
+                timed_lines.sort(key=lambda x: x[0])
+                full_transcript = "\n".join(line for _, line in timed_lines)
                 slide_timestamps = [t.timestamp for t in transitions]
 
                 segmenter = TopicSegmenter(
